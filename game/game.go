@@ -15,21 +15,20 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
-// --- Constantes de Posición ---
-// (Ajusta estos valores para que coincidan con tu diseño)
+// --- Constantes de Posición (¡CORREGIDAS!) ---
 const (
-	tripodeX = 150.0
+	tripodeX = 80.0 // Movido a la izquierda
 	tripodeY = 200.0
 
-	iconPythonX    = 300.0
+	iconPythonX    = 250.0 // Iconos más juntos
 	iconPythonY    = 200.0
-	iconRabbitX    = 450.0
+	iconRabbitX    = 350.0
 	iconRabbitY    = 200.0
-	iconWebsocketX = 600.0
+	iconWebsocketX = 450.0
 	iconWebsocketY = 200.0
 
-	monitorX = 700.0
-	monitorY = 350.0
+	monitorX = 600.0 // Monitor movido a la izquierda
+	monitorY = 200.0 // Monitor alineado
 
 	tiltMeterX = 100.0
 	tiltMeterY = 300.0
@@ -66,9 +65,8 @@ func NewGame(assets *assets.Assets, state *state.VisualState, btnRect image.Rect
 
 func (g *Game) Update() error {
 	// Incrementa los contadores de animación (para los sprite sheets)
-	// (El % 6 asume 6 frames por animación, ajústalo)
-	g.animPacketCounter = (g.animPacketCounter + 1) % 360 // Un bucle largo
-	g.animIconCounter = (g.animIconCounter + 1) % 360     // Un bucle largo
+	g.animPacketCounter = (g.animPacketCounter + 1) % 360
+	g.animIconCounter = (g.animIconCounter + 1) % 360
 
 	// --- 1. Manejar Input del Usuario ---
 	g.handleInput()
@@ -79,7 +77,13 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// --- ¡handleInput MODIFICADO! ---
 func (g *Game) handleInput() {
+	// --- ¡NUEVO! Lógica de Pantalla Completa ---
+	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
+		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+	}
+
 	x, y := ebiten.CursorPosition()
 	clickPoint := image.Pt(x, y)
 
@@ -114,7 +118,6 @@ func (g *Game) startSimulation() {
 	g.State.Mutex.Unlock()
 
 	// ¡Lanza las 3 goroutines (los workers)!
-	// (Usamos los datos de inclinación simulados)
 	tilt := g.State.CurrentTilt
 
 	go simulation.SendPOSTRequest(
@@ -134,8 +137,7 @@ func (g *Game) startSimulation() {
 	)
 }
 
-// updatePacketFSM es la Máquina de Estados Finita que mueve los paquetes
-// Se ejecuta 60 veces por segundo en el hilo principal (no bloquea)
+// updatePacketFSM (Sin cambios)
 func (g *Game) updatePacketFSM() {
 	g.State.Mutex.Lock()
 	defer g.State.Mutex.Unlock()
@@ -159,7 +161,6 @@ func (g *Game) updatePacketFSM() {
 		} else {
 			packet.X = packet.TargetX
 		}
-		// (Aquí iría la lógica para mover Y si no están alineados)
 
 		// Comprobar si llegó al objetivo
 		if packet.X == packet.TargetX {
@@ -226,10 +227,35 @@ func (g *Game) updatePacketFSM() {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{R: 0x1a, G: 0x1a, B: 0x1a, A: 255}) // Fondo oscuro
 
-	// 1. Dibuja el Trípode
+	// --- 1. Dibuja el Trípode (¡CORREGIDO!) ---
 	opTripode := &ebiten.DrawImageOptions{}
 	opTripode.GeoM.Translate(tripodeX, tripodeY)
-	screen.DrawImage(g.Assets.GeovaTripod, opTripode)
+
+	// Lógica para elegir el frame basado en la inclinación
+	// (Asume 5 frames de 128x128. ¡Ajusta 'frameWidth' y 'frameHeight'!)
+	frameWidth := 128 
+	frameHeight := 128 // Asume 128 de alto
+	
+	frameIndex := 0 // El frame del "centro" (frame 0)
+
+	if g.State.CurrentTilt < -10.0 {
+		frameIndex = 3 // Izquierda Extremo (frame 3)
+	} else if g.State.CurrentTilt < -2.0 {
+		frameIndex = 1 // Izquierda Leve (frame 1)
+	} else if g.State.CurrentTilt > 10.0 {
+		frameIndex = 4 // Derecha Extremo (frame 4)
+	} else if g.State.CurrentTilt > 2.0 {
+		frameIndex = 2 // Derecha Leve (frame 2)
+	}
+	
+	// Calcula el 'rectángulo' del frame a dibujar
+	sx := frameIndex * frameWidth
+	sy := 0
+	rect := image.Rect(sx, sy, sx+frameWidth, sy+frameHeight)
+	
+	// Dibuja SÓLO ese frame
+	// (Comprueba si tu asset se llama GeovaTripod o geova_tilt_anim)
+	screen.DrawImage(g.Assets.GeovaTripod.SubImage(rect).(*ebiten.Image), opTripode)
 
 	// 2. Dibuja el Medidor de Inclinación (Opción B)
 	opTiltBG := &ebiten.DrawImageOptions{}
